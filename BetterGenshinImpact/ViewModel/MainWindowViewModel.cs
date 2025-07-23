@@ -5,6 +5,7 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service;
 using BetterGenshinImpact.View;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -23,6 +24,7 @@ using System.Net.Http.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using BetterGenshinImpact.GameTask.UseRedeemCode;
 using BetterGenshinImpact.View.Windows;
 using BetterGenshinImpact.ViewModel.Pages;
 using DeviceId;
@@ -35,25 +37,26 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
 {
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly IConfigService _configService;
-    public string Title => $"BetterGI · 更好的原神 · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
+    private readonly ILocalizationService _localizationService;
+    
+    public string Title => $"{_localizationService.GetString("app.title")} · {Global.Version}{(RuntimeHelper.IsDebug ? " · Dev" : string.Empty)}";
 
-    [ObservableProperty]
-    private bool _isVisible = true;
+    [ObservableProperty] private bool _isVisible = true;
 
-    [ObservableProperty]
-    private WindowState _windowState = WindowState.Normal;
+    [ObservableProperty] private WindowState _windowState = WindowState.Normal;
 
-    [ObservableProperty]
-    private WindowBackdropType _currentBackdropType = WindowBackdropType.Auto;
+    [ObservableProperty] private WindowBackdropType _currentBackdropType = WindowBackdropType.Auto;
 
-    [ObservableProperty]
-    private bool _isWin11Later = OsVersionHelper.IsWindows11_OrGreater;
+    [ObservableProperty] private bool _isWin11Later = OsVersionHelper.IsWindows11_OrGreater;
+    
+    private bool _firstActivated = true;
 
     public AllConfig Config { get; set; }
 
-    public MainWindowViewModel(INavigationService navigationService, IConfigService configService)
+    public MainWindowViewModel(INavigationService navigationService, IConfigService configService, ILocalizationService localizationService)
     {
         _configService = configService;
+        _localizationService = localizationService;
         Config = _configService.Get();
         _logger = App.GetLogger<MainWindowViewModel>();
     }
@@ -61,7 +64,37 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
     [RelayCommand]
     private async Task OnActivated()
     {
-        await ScriptRepoUpdater.Instance.ImportScriptFromClipboard();
+        // 首次激活时不处理
+        if (_firstActivated)
+        {
+            _firstActivated = false;
+            return;
+        }
+        
+        // 激活时候获取剪切板内容 用于脚本导入、兑换码自动兑换等
+        try
+        {
+            if (Clipboard.ContainsText())
+            {
+                string clipboardText = Clipboard.GetText();
+
+                if (string.IsNullOrEmpty(clipboardText)
+                    || clipboardText.Length > 1000)
+                {
+                    return;
+                }
+                
+                
+                // 1. 导入脚本
+                await ScriptRepoUpdater.Instance.ImportScriptFromClipboard(clipboardText);
+                // 2. 自动兑换码
+                await RedeemCodeManager.ImportFromClipboard(clipboardText);
+            }
+        }
+        catch
+        {
+            // 忽略异常，可能是因为没有权限访问剪切板
+        }
     }
 
     [RelayCommand]
@@ -204,7 +237,8 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
             // 低版本才需要迁移
             if (fileVersionInfo.FileVersion != null && !Global.IsNewVersion(fileVersionInfo.FileVersion))
             {
-                var res = await MessageBox.ShowAsync("检测到旧的 BetterGI 配置，是否迁移配置并清理旧目录？", "BetterGI",
+                var localizationService = App.GetService<ILocalizationService>();
+                var res = await MessageBox.ShowAsync(localizationService.GetString("dialog.confirmMigrateConfig"), localizationService.GetString("dialog.betterGI"),
                     System.Windows.MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (res == System.Windows.MessageBoxResult.Yes)
                 {
@@ -212,7 +246,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
                     DirectoryHelper.CopyDirectory(embeddedUserPath, Global.Absolute("User"));
                     // 删除旧目录
                     DirectoryHelper.DeleteReadOnlyDirectory(embeddedPath);
-                    await MessageBox.InformationAsync("迁移配置成功, 软件将自动退出，请手动重新启动 BetterGI！");
+                    await MessageBox.InformationAsync(localizationService.GetString("dialog.migrateConfigSuccess"));
                     Application.Current.Shutdown();
                 }
             }
@@ -231,6 +265,7 @@ public partial class MainWindowViewModel : ObservableObject, IViewModel
             Global.Absolute(@"Assets\Map\mainMap256Block_SIFT.mat"),
             Global.Absolute(@"Assets\Map\mainMap2048Block_SIFT.kp"),
             Global.Absolute(@"Assets\Map\mainMap2048Block_SIFT.mat"),
+            Global.Absolute(@"Assets\Map\Teyvat\map_info.json"),
         ];
 
         // 循环删除

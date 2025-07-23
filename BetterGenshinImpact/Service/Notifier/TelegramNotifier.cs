@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using BetterGenshinImpact.Service.Notification.Model;
 using BetterGenshinImpact.Service.Notifier.Exception;
 using BetterGenshinImpact.Service.Notifier.Interface;
+using BetterGenshinImpact.Service.Interface;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -40,6 +42,16 @@ public class TelegramNotifier : INotifier, IDisposable
     public string TelegramApiBaseUrl { get; set; }
 
     /// <summary>
+    ///     代理地址
+    /// </summary>
+    public string ProxyUrl { get; set; }
+
+    /// <summary>
+    ///     是否启用代理
+    /// </summary>
+    public bool ProxyEnabled { get; set; }
+
+    /// <summary>
     ///     通知器名称
     /// </summary>
     public string Name { get; set; } = "Telegram";
@@ -51,13 +63,45 @@ public class TelegramNotifier : INotifier, IDisposable
     /// <param name="telegramBotToken">Telegram机器人Token</param>
     /// <param name="telegramChatId">Telegram聊天ID</param>
     /// <param name="telegramApiBaseUrl">自定义Telegram API基础URL（可以只填写域名，如"xxx.xxx.xxx"），为空则使用默认URL</param>
-    public TelegramNotifier(HttpClient? httpClient = null, string telegramBotToken = "", string telegramChatId = "",
-        string telegramApiBaseUrl = "")
+    /// <param name="proxyUrl">代理地址（可选，格式：http://127.0.0.1:7890）</param>
+    /// <param name="proxyEnabled">是否启用代理</param>
+    public TelegramNotifier(
+        HttpClient? httpClient = null,
+        string telegramBotToken = "",
+        string telegramChatId = "",
+        string telegramApiBaseUrl = "",
+        string proxyUrl = "",
+        bool proxyEnabled = false)
     {
         TelegramBotToken = telegramBotToken;
         TelegramChatId = telegramChatId;
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        _ownsHttpClient = httpClient == null;
+        ProxyUrl = proxyUrl;
+        ProxyEnabled = proxyEnabled;
+
+        if (httpClient != null)
+        {
+            _httpClient = httpClient;
+            _ownsHttpClient = false;
+        }
+        else
+        {
+            var handler = new HttpClientHandler();
+            if (proxyEnabled && !string.IsNullOrEmpty(proxyUrl))
+                try
+                {
+                    handler.Proxy = new WebProxy(proxyUrl);
+                    handler.UseProxy = true;
+                }
+                catch (UriFormatException ex)
+                {
+                    // 抛出异常以通知调用者配置错误
+                    throw new NotifierException($"Invalid Telegram proxy URL format: {proxyUrl}. Details: {ex.Message}");
+                }
+
+            _httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+            _ownsHttpClient = true;
+        }
+
         TelegramApiBaseUrl = FormatApiBaseUrl(telegramApiBaseUrl);
     }
 
@@ -68,9 +112,22 @@ public class TelegramNotifier : INotifier, IDisposable
 
     public async Task SendAsync(BaseNotificationData content)
     {
-        if (string.IsNullOrEmpty(TelegramBotToken)) throw new NotifierException("Telegram bot token is not set");
-        if (string.IsNullOrEmpty(TelegramChatId)) throw new NotifierException("Telegram chat ID is not set");
-        if (string.IsNullOrEmpty(content.Message)) throw new NotifierException("No message content to send");
+        var localizationService = App.GetService<ILocalizationService>();
+        if (string.IsNullOrEmpty(TelegramBotToken)) 
+        {
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramTokenEmpty") : "Telegram bot token is not set";
+            throw new NotifierException(errorMessage);
+        }
+        if (string.IsNullOrEmpty(TelegramChatId)) 
+        {
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramChatIdEmpty") : "Telegram chat ID is not set";
+            throw new NotifierException(errorMessage);
+        }
+        if (string.IsNullOrEmpty(content.Message)) 
+        {
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.messageEmpty") : "No message content to send";
+            throw new NotifierException(errorMessage);
+        }
 
         try
         {
@@ -84,15 +141,18 @@ public class TelegramNotifier : INotifier, IDisposable
         }
         catch (HttpRequestException ex)
         {
-            throw new NotifierException("Network error sending Telegram notification: " + ex.Message);
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramNetworkError", ex.Message) : "Network error sending Telegram notification: " + ex.Message;
+            throw new NotifierException(errorMessage);
         }
         catch (TaskCanceledException)
         {
-            throw new NotifierException("Telegram API request timed out. Check your internet connection.");
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramTimeout") : "Telegram API request timed out. Check your internet connection.";
+            throw new NotifierException(errorMessage);
         }
         catch (System.Exception ex) when (ex is not NotifierException)
         {
-            throw new NotifierException("Error sending Telegram notification: " + ex.Message);
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramError", ex.Message) : "Error sending Telegram notification: " + ex.Message;
+            throw new NotifierException(errorMessage);
         }
     }
 
@@ -137,19 +197,35 @@ public class TelegramNotifier : INotifier, IDisposable
         var responseContent = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
-            throw new NotifierException($"Telegram {type} message failed: {response.StatusCode}, {responseContent}");
+        {
+            var localizationService = App.GetService<ILocalizationService>();
+            var errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramMessageFailed", type, response.StatusCode, responseContent) : $"Telegram {type} message failed: {response.StatusCode}, {responseContent}";
+            throw new NotifierException(errorMessage);
+        }
 
         var (isSuccess, errorCode, errorDescription) = ValidateApiResponse(responseContent);
         if (!isSuccess)
         {
-            var msg = errorCode switch
+            var localizationService = App.GetService<ILocalizationService>();
+            string errorMessage;
+            
+            switch (errorCode)
             {
-                400 => "Please send a message to the bot first and check that the chat ID is correct.",
-                401 => "Telegram bot token is incorrect.",
-                404 => $"Telegram API not found (404). Please verify your bot token is correct. URL: {endpoint}",
-                _ => $"Telegram API error: {errorDescription} (Code: {errorCode})"
-            };
-            throw new NotifierException(msg);
+                case 400:
+                    errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramChatIdInvalid") : "Please send a message to the bot first and check that the chat ID is correct.";
+                    break;
+                case 401:
+                    errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramTokenInvalid") : "Telegram bot token is incorrect.";
+                    break;
+                case 404:
+                    errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramApiNotFound", endpoint) : $"Telegram API not found (404). Please verify your bot token is correct. URL: {endpoint}";
+                    break;
+                default:
+                    errorMessage = localizationService != null ? localizationService.GetString("notification.error.telegramApiError", errorDescription, errorCode) : $"Telegram API error: {errorDescription} (Code: {errorCode})";
+                    break;
+            }
+            
+            throw new NotifierException(errorMessage);
         }
     }
 
@@ -183,4 +259,6 @@ public class TelegramNotifier : INotifier, IDisposable
             return (false, 0, "Failed to parse API response: " + ex.Message);
         }
     }
+
+    
 }

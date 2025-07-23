@@ -34,6 +34,7 @@ using BetterGenshinImpact.GameTask.AutoFight.Assets;
 using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.GameTask.QuickTeleport.Assets;
+using BetterGenshinImpact.GameTask.UseRedeemCode;
 using BetterGenshinImpact.View;
 using OpenCvSharp;
 using Vanara.PInvoke;
@@ -45,15 +46,17 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
 {
     private readonly ILogger<HotKeyPageViewModel> _logger;
     private readonly TaskSettingsPageViewModel _taskSettingsPageViewModel;
+    private readonly ILocalizationService _localizationService;
     public AllConfig Config { get; set; }
 
     [ObservableProperty]
     private ObservableCollection<HotKeySettingModel> _hotKeySettingModels = [];
 
-    public HotKeyPageViewModel(IConfigService configService, ILogger<HotKeyPageViewModel> logger, TaskSettingsPageViewModel taskSettingsPageViewModel)
+    public HotKeyPageViewModel(IConfigService configService, ILogger<HotKeyPageViewModel> logger, TaskSettingsPageViewModel taskSettingsPageViewModel, ILocalizationService localizationService)
     {
         _logger = logger;
         _taskSettingsPageViewModel = taskSettingsPageViewModel;
+        _localizationService = localizationService;
         // 获取配置
         Config = configService.Get();
 
@@ -73,7 +76,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                     // 更新快捷键
                     if (e.PropertyName == "HotKey")
                     {
-                        Debug.WriteLine($"{model.FunctionName} 快捷键变更为 {model.HotKey}");
+                        Debug.WriteLine($"{model.FunctionName} {_localizationService.GetString("hotkey.hotkeyChangedTo")} {model.HotKey}");
                         var pi = Config.HotKeyConfig.GetType().GetProperty(model.ConfigPropertyName, BindingFlags.Public | BindingFlags.Instance);
                         if (null != pi && pi.CanWrite)
                         {
@@ -90,7 +93,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                     // 更新快捷键类型
                     if (e.PropertyName == "HotKeyType")
                     {
-                        Debug.WriteLine($"{model.FunctionName} 快捷键类型变更为 {model.HotKeyType.ToChineseName()}");
+                        Debug.WriteLine($"{model.FunctionName} {_localizationService.GetString("hotkey.hotkeyTypeChangedTo")} {model.HotKeyType.ToChineseName()}");
                         model.HotKey = HotKey.None;
                         var pi = Config.HotKeyConfig.GetType().GetProperty(model.ConfigPropertyName + "Type", BindingFlags.Public | BindingFlags.Instance);
                         if (null != pi && pi.CanWrite)
@@ -176,7 +179,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
     {
         // 一级目录/快捷键
         var bgiEnabledHotKeySettingModel = new HotKeySettingModel(
-            "启动停止 BetterGI",
+            _localizationService.GetString("hotkey.startStopBetterGI"),
             nameof(Config.HotKeyConfig.BgiEnabledHotkey),
             Config.HotKeyConfig.BgiEnabledHotkey,
             Config.HotKeyConfig.BgiEnabledHotkeyType,
@@ -185,47 +188,47 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         HotKeySettingModels.Add(bgiEnabledHotKeySettingModel);
 
         var systemDirectory = new HotKeySettingModel(
-            "系统控制"
+            _localizationService.GetString("hotkey.systemControl")
         );
         HotKeySettingModels.Add(systemDirectory);
 
         var timerDirectory = new HotKeySettingModel(
-            "实时任务"
+            _localizationService.GetString("hotkey.realtimeTasks")
         );
         HotKeySettingModels.Add(timerDirectory);
 
         var soloTaskDirectory = new HotKeySettingModel(
-            "独立任务"
+            _localizationService.GetString("hotkey.soloTasks")
         );
         HotKeySettingModels.Add(soloTaskDirectory);
 
         var macroDirectory = new HotKeySettingModel(
-            "操控辅助"
+            _localizationService.GetString("hotkey.controlAssist")
         );
         HotKeySettingModels.Add(macroDirectory);
 
         var devDirectory = new HotKeySettingModel(
-            "开发者"
+            _localizationService.GetString("hotkey.developer")
         );
         HotKeySettingModels.Add(devDirectory);
 
         // 二级快捷键
         systemDirectory.Children.Add(new HotKeySettingModel(
-            "停止当前脚本/独立任务",
+            _localizationService.GetString("hotkey.stopCurrentTask"),
             nameof(Config.HotKeyConfig.CancelTaskHotkey),
             Config.HotKeyConfig.CancelTaskHotkey,
             Config.HotKeyConfig.CancelTaskHotkeyType,
             (_, _) => { CancellationContext.Instance.Cancel(); }
         ));
         systemDirectory.Children.Add(new HotKeySettingModel(
-            "暂停当前脚本/独立任务",
+            _localizationService.GetString("hotkey.pauseCurrentTask"),
             nameof(Config.HotKeyConfig.SuspendHotkey),
             Config.HotKeyConfig.SuspendHotkey,
             Config.HotKeyConfig.SuspendHotkeyType,
             (_, _) => { RunnerContext.Instance.IsSuspend = !RunnerContext.Instance.IsSuspend; }
         ));
         var takeScreenshotHotKeySettingModel = new HotKeySettingModel(
-            "游戏截图",
+            _localizationService.GetString("hotkey.takeScreenshot"),
             nameof(Config.HotKeyConfig.TakeScreenshotHotkey),
             Config.HotKeyConfig.TakeScreenshotHotkey,
             Config.HotKeyConfig.TakeScreenshotHotkeyType,
@@ -234,7 +237,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         systemDirectory.Children.Add(takeScreenshotHotKeySettingModel);
 
         systemDirectory.Children.Add(new HotKeySettingModel(
-            "日志与状态窗口展示开关",
+            _localizationService.GetString("hotkey.toggleLogStatusWindow"),
             nameof(Config.HotKeyConfig.LogBoxDisplayHotkey),
             Config.HotKeyConfig.LogBoxDisplayHotkey,
             Config.HotKeyConfig.LogBoxDisplayHotkeyType,
@@ -247,71 +250,71 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         var autoPickEnabledHotKeySettingModel = new HotKeySettingModel(
-            "自动拾取开关",
+            _localizationService.GetString("hotkey.autoPickToggle"),
             nameof(Config.HotKeyConfig.AutoPickEnabledHotkey),
             Config.HotKeyConfig.AutoPickEnabledHotkey,
             Config.HotKeyConfig.AutoPickEnabledHotkeyType,
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoPickConfig.Enabled = !TaskContext.Instance().Config.AutoPickConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动拾取", ToChinese(TaskContext.Instance().Config.AutoPickConfig.Enabled));
+                _logger.LogInformation(_localizationService.GetString("hotkey.switchStatusTo"), _localizationService.GetString("hotkey.autoPick"), ToChinese(TaskContext.Instance().Config.AutoPickConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoPickEnabledHotKeySettingModel);
 
         var autoSkipEnabledHotKeySettingModel = new HotKeySettingModel(
-            "自动剧情开关",
+            _localizationService.GetString("hotkey.autoStoryToggle"),
             nameof(Config.HotKeyConfig.AutoSkipEnabledHotkey),
             Config.HotKeyConfig.AutoSkipEnabledHotkey,
             Config.HotKeyConfig.AutoSkipEnabledHotkeyType,
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoSkipConfig.Enabled = !TaskContext.Instance().Config.AutoSkipConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动剧情", ToChinese(TaskContext.Instance().Config.AutoSkipConfig.Enabled));
+                _logger.LogInformation(_localizationService.GetString("hotkey.switchStatusTo"), _localizationService.GetString("hotkey.autoStory"), ToChinese(TaskContext.Instance().Config.AutoSkipConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoSkipEnabledHotKeySettingModel);
 
         timerDirectory.Children.Add(new HotKeySettingModel(
-            "自动邀约开关",
+            _localizationService.GetString("hotkey.autoHangoutToggle"),
             nameof(Config.HotKeyConfig.AutoSkipHangoutEnabledHotkey),
             Config.HotKeyConfig.AutoSkipHangoutEnabledHotkey,
             Config.HotKeyConfig.AutoSkipHangoutEnabledHotkeyType,
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled = !TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动邀约", ToChinese(TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled));
+                _logger.LogInformation(_localizationService.GetString("hotkey.switchStatusTo"), _localizationService.GetString("hotkey.autoHangout"), ToChinese(TaskContext.Instance().Config.AutoSkipConfig.AutoHangoutEventEnabled));
             }
         ));
 
         var autoFishingEnabledHotKeySettingModel = new HotKeySettingModel(
-            "自动钓鱼开关",
+            _localizationService.GetString("hotkey.autoFishingToggle"),
             nameof(Config.HotKeyConfig.AutoFishingEnabledHotkey),
             Config.HotKeyConfig.AutoFishingEnabledHotkey,
             Config.HotKeyConfig.AutoFishingEnabledHotkeyType,
             (_, _) =>
             {
                 TaskContext.Instance().Config.AutoFishingConfig.Enabled = !TaskContext.Instance().Config.AutoFishingConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "自动钓鱼", ToChinese(TaskContext.Instance().Config.AutoFishingConfig.Enabled));
+                _logger.LogInformation(_localizationService.GetString("hotkey.switchStatusTo"), _localizationService.GetString("hotkey.autoFishing"), ToChinese(TaskContext.Instance().Config.AutoFishingConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(autoFishingEnabledHotKeySettingModel);
 
         var quickTeleportEnabledHotKeySettingModel = new HotKeySettingModel(
-            "快速传送开关",
+            _localizationService.GetString("hotkey.quickTeleportToggle"),
             nameof(Config.HotKeyConfig.QuickTeleportEnabledHotkey),
             Config.HotKeyConfig.QuickTeleportEnabledHotkey,
             Config.HotKeyConfig.QuickTeleportEnabledHotkeyType,
             (_, _) =>
             {
                 TaskContext.Instance().Config.QuickTeleportConfig.Enabled = !TaskContext.Instance().Config.QuickTeleportConfig.Enabled;
-                _logger.LogInformation("切换{Name}状态为[{Enabled}]", "快速传送", ToChinese(TaskContext.Instance().Config.QuickTeleportConfig.Enabled));
+                _logger.LogInformation(_localizationService.GetString("hotkey.switchStatusTo"), _localizationService.GetString("hotkey.quickTeleport"), ToChinese(TaskContext.Instance().Config.QuickTeleportConfig.Enabled));
             }
         );
         timerDirectory.Children.Add(quickTeleportEnabledHotKeySettingModel);
 
         var quickTeleportTickHotKeySettingModel = new HotKeySettingModel(
-            "手动触发快速传送触发快捷键（按住起效）",
+            _localizationService.GetString("hotkey.manualQuickTeleportTrigger"),
             nameof(Config.HotKeyConfig.QuickTeleportTickHotkey),
             Config.HotKeyConfig.QuickTeleportTickHotkey,
             Config.HotKeyConfig.QuickTeleportTickHotkeyType,
@@ -321,7 +324,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         timerDirectory.Children.Add(quickTeleportTickHotKeySettingModel);
 
         var turnAroundHotKeySettingModel = new HotKeySettingModel(
-            "长按旋转视角 - 那维莱特转圈",
+            _localizationService.GetString("hotkey.holdToRotateView"),
             nameof(Config.HotKeyConfig.TurnAroundHotkey),
             Config.HotKeyConfig.TurnAroundHotkey,
             Config.HotKeyConfig.TurnAroundHotkeyType,
@@ -331,7 +334,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         macroDirectory.Children.Add(turnAroundHotKeySettingModel);
 
         var enhanceArtifactHotKeySettingModel = new HotKeySettingModel(
-            "按下快速强化圣遗物",
+            _localizationService.GetString("hotkey.quickEnhanceArtifact"),
             nameof(Config.HotKeyConfig.EnhanceArtifactHotkey),
             Config.HotKeyConfig.EnhanceArtifactHotkey,
             Config.HotKeyConfig.EnhanceArtifactHotkeyType,
@@ -341,7 +344,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         macroDirectory.Children.Add(enhanceArtifactHotKeySettingModel);
 
         macroDirectory.Children.Add(new HotKeySettingModel(
-            "按下快速购买商店物品",
+            _localizationService.GetString("hotkey.quickBuyShopItems"),
             nameof(Config.HotKeyConfig.QuickBuyHotkey),
             Config.HotKeyConfig.QuickBuyHotkey,
             Config.HotKeyConfig.QuickBuyHotkeyType,
@@ -350,7 +353,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         macroDirectory.Children.Add(new HotKeySettingModel(
-            "按下快速进出尘歌壶",
+            _localizationService.GetString("hotkey.quickSereniteaPot"),
             nameof(Config.HotKeyConfig.QuickSereniteaPotHotkey),
             Config.HotKeyConfig.QuickSereniteaPotHotkey,
             Config.HotKeyConfig.QuickSereniteaPotHotkeyType,
@@ -358,7 +361,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止一条龙",
+            _localizationService.GetString("hotkey.startStopOneDragon"),
             nameof(Config.HotKeyConfig.OnedragonHotkey),
             Config.HotKeyConfig.OnedragonHotkey,
             Config.HotKeyConfig.OnedragonHotkeyType,
@@ -366,7 +369,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动七圣召唤",
+            _localizationService.GetString("hotkey.startStopAutoTCG"),
             nameof(Config.HotKeyConfig.AutoGeniusInvokationHotkey),
             Config.HotKeyConfig.AutoGeniusInvokationHotkey,
             Config.HotKeyConfig.AutoGeniusInvokationHotkeyType,
@@ -374,7 +377,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动伐木",
+            _localizationService.GetString("hotkey.startStopAutoWood"),
             nameof(Config.HotKeyConfig.AutoWoodHotkey),
             Config.HotKeyConfig.AutoWoodHotkey,
             Config.HotKeyConfig.AutoWoodHotkeyType,
@@ -382,7 +385,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动战斗",
+            _localizationService.GetString("hotkey.startStopAutoFight"),
             nameof(Config.HotKeyConfig.AutoFightHotkey),
             Config.HotKeyConfig.AutoFightHotkey,
             Config.HotKeyConfig.AutoFightHotkeyType,
@@ -390,21 +393,21 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动秘境",
+            _localizationService.GetString("hotkey.startStopAutoDomain"),
             nameof(Config.HotKeyConfig.AutoDomainHotkey),
             Config.HotKeyConfig.AutoDomainHotkey,
             Config.HotKeyConfig.AutoDomainHotkeyType,
             (_, _) => { SwitchSoloTask(_taskSettingsPageViewModel.SwitchAutoDomainCommand); }
         ));
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动音游",
+            _localizationService.GetString("hotkey.startStopAutoMusicGame"),
             nameof(Config.HotKeyConfig.AutoMusicGameHotkey),
             Config.HotKeyConfig.AutoMusicGameHotkey,
             Config.HotKeyConfig.AutoMusicGameHotkeyType,
             (_, _) => { SwitchSoloTask(_taskSettingsPageViewModel.SwitchAutoMusicGameCommand); }
         ));
         soloTaskDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止自动钓鱼",
+            _localizationService.GetString("hotkey.startStopAutoFishingGame"),
             nameof(Config.HotKeyConfig.AutoFishingGameHotkey),
             Config.HotKeyConfig.AutoFishingGameHotkey,
             Config.HotKeyConfig.AutoFishingGameHotkeyType,
@@ -412,7 +415,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         macroDirectory.Children.Add(new HotKeySettingModel(
-            "快捷点击原神内确认按钮",
+            _localizationService.GetString("hotkey.quickClickConfirmButton"),
             nameof(Config.HotKeyConfig.ClickGenshinConfirmButtonHotkey),
             Config.HotKeyConfig.ClickGenshinConfirmButtonHotkey,
             Config.HotKeyConfig.ClickGenshinConfirmButtonHotkeyType,
@@ -420,18 +423,18 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             {
                 if (Bv.ClickConfirmButton(TaskControl.CaptureToRectArea()))
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：成功", "确认");
+                    TaskControl.Logger.LogInformation(_localizationService.GetString("hotkey.quickClickButtonSuccess"), _localizationService.GetString("common.confirm"));
                 }
                 else
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：未找到按钮图片", "确认");
+                    TaskControl.Logger.LogInformation(_localizationService.GetString("hotkey.quickClickButtonNotFound"), _localizationService.GetString("common.confirm"));
                 }
             },
             true
         ));
 
         macroDirectory.Children.Add(new HotKeySettingModel(
-            "快捷点击原神内取消按钮",
+            _localizationService.GetString("hotkey.quickClickCancelButton"),
             nameof(Config.HotKeyConfig.ClickGenshinCancelButtonHotkey),
             Config.HotKeyConfig.ClickGenshinCancelButtonHotkey,
             Config.HotKeyConfig.ClickGenshinCancelButtonHotkeyType,
@@ -439,18 +442,18 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             {
                 if (Bv.ClickCancelButton(TaskControl.CaptureToRectArea()))
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：成功", "取消");
+                    TaskControl.Logger.LogInformation(_localizationService.GetString("hotkey.quickClickButtonSuccess"), _localizationService.GetString("common.cancel"));
                 }
                 else
                 {
-                    TaskControl.Logger.LogInformation("触发快捷点击原神内{Btn}按钮：未找到按钮图片", "取消");
+                    TaskControl.Logger.LogInformation(_localizationService.GetString("hotkey.quickClickButtonNotFound"), _localizationService.GetString("common.cancel"));
                 }
             },
             true
         ));
 
         macroDirectory.Children.Add(new HotKeySettingModel(
-            "一键战斗宏快捷键",
+            _localizationService.GetString("hotkey.oneKeyFightMacro"),
             nameof(Config.HotKeyConfig.OneKeyFightHotkey),
             Config.HotKeyConfig.OneKeyFightHotkey,
             Config.HotKeyConfig.OneKeyFightHotkeyType,
@@ -462,7 +465,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         });
 
         devDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止键鼠录制",
+            _localizationService.GetString("hotkey.startStopKeyMouseRecord"),
             nameof(Config.HotKeyConfig.KeyMouseMacroRecordHotkey),
             Config.HotKeyConfig.KeyMouseMacroRecordHotkey,
             Config.HotKeyConfig.KeyMouseMacroRecordHotkeyType, async (_, _) =>
@@ -470,7 +473,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
                 var vm = App.GetService<KeyMouseRecordPageViewModel>();
                 if (vm == null)
                 {
-                    _logger.LogError("无法找到 KeyMouseRecordPageViewModel 单例对象！");
+                    _logger.LogError(_localizationService.GetString("hotkey.cannotFindViewModel"));
                     return;
                 }
 
@@ -487,14 +490,14 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         devDirectory.Children.Add(new HotKeySettingModel(
-            "（开发）获取当前大地图中心点位置",
+            _localizationService.GetString("hotkey.devGetBigMapPosition"),
             nameof(Config.HotKeyConfig.RecBigMapPosHotkey),
             Config.HotKeyConfig.RecBigMapPosHotkey,
             Config.HotKeyConfig.RecBigMapPosHotkeyType,
             (_, _) =>
             {
                 var p = new TpTask(CancellationToken.None).GetPositionFromBigMap(MapTypes.Teyvat.ToString());
-                _logger.LogInformation("大地图位置：{Position}", p);
+                _logger.LogInformation(_localizationService.GetString("hotkey.bigMapPosition"), p);
             }
         ));
 
@@ -502,7 +505,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         var pathRecording = false;
 
         devDirectory.Children.Add(new HotKeySettingModel(
-            "启动/停止路径记录器",
+            _localizationService.GetString("hotkey.startStopPathRecorder"),
             nameof(Config.HotKeyConfig.PathRecorderHotkey),
             Config.HotKeyConfig.PathRecorderHotkey,
             Config.HotKeyConfig.PathRecorderHotkeyType,
@@ -522,7 +525,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         ));
 
         devDirectory.Children.Add(new HotKeySettingModel(
-            "添加路径点",
+            _localizationService.GetString("hotkey.addWaypoint"),
             nameof(Config.HotKeyConfig.AddWaypointHotkey),
             Config.HotKeyConfig.AddWaypointHotkey,
             Config.HotKeyConfig.AddWaypointHotkeyType,
@@ -540,7 +543,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
         if (RuntimeHelper.IsDebug)
         {
             var debugDirectory = new HotKeySettingModel(
-                "内部测试"
+                _localizationService.GetString("hotkey.internalTest")
             );
             HotKeySettingModels.Add(debugDirectory);
 
@@ -575,18 +578,16 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             //     }
             // ));
             debugDirectory.Children.Add(new HotKeySettingModel(
-                "（测试）测试",
+                _localizationService.GetString("hotkey.testTest"),
                 nameof(Config.HotKeyConfig.Test1Hotkey),
                 Config.HotKeyConfig.Test1Hotkey,
                 Config.HotKeyConfig.Test1HotkeyType,
                 (_, _) =>
                 {
-                    LowerHeadThenWalkToTask _lowerHeadThenWalkToTask = new("chest_tip.png", 20000);
-                    _lowerHeadThenWalkToTask.Start(CancellationToken.None);
                 }
             ));
             debugDirectory.Children.Add(new HotKeySettingModel(
-                "（测试）测试2",
+                _localizationService.GetString("hotkey.testTest2"),
                 nameof(Config.HotKeyConfig.Test2Hotkey),
                 Config.HotKeyConfig.Test2Hotkey,
                 Config.HotKeyConfig.Test2HotkeyType,
@@ -602,7 +603,7 @@ public partial class HotKeyPageViewModel : ObservableObject, IViewModel
             ));
 
             debugDirectory.Children.Add(new HotKeySettingModel(
-                "（测试）播放内存中的路径",
+                _localizationService.GetString("hotkey.testPlayMemoryPath"),
                 nameof(Config.HotKeyConfig.ExecutePathHotkey),
                 Config.HotKeyConfig.ExecutePathHotkey,
                 Config.HotKeyConfig.ExecutePathHotkeyType,

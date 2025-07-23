@@ -15,6 +15,7 @@ using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
+using BetterGenshinImpact.Core.Script.Utils;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoPathing.Model;
 using BetterGenshinImpact.GameTask.LogParse;
@@ -22,6 +23,7 @@ using BetterGenshinImpact.GameTask.TaskProgress;
 using BetterGenshinImpact.Helpers.Ui;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
+using BetterGenshinImpact.Service;
 using BetterGenshinImpact.View.Controls.Webview;
 using BetterGenshinImpact.View.Pages.View;
 using BetterGenshinImpact.View.Windows;
@@ -82,15 +84,17 @@ public partial class ScriptControlViewModel : ViewModel
     [RelayCommand]
     private void OnAddScriptGroup()
     {
-        var str = PromptDialog.Prompt("请输入配置组名称", "新增配置组");
+        var localizationService = App.GetService<ILocalizationService>();
+        var str = PromptDialog.Prompt(localizationService.GetString("dialog.enterConfigGroupName"), localizationService.GetString("dialog.addConfigGroup"));
         if (!string.IsNullOrEmpty(str))
         {
             // 检查是否已存在
             if (ScriptGroups.Any(x => x.Name == str))
             {
+                var localizationService2 = App.GetService<ILocalizationService>();
                 _snackbarService.Show(
-                    "配置组已存在",
-                    $"配置组 {str} 已经存在，请勿重复添加",
+                    localizationService2.GetString("dialog.configGroupExists"),
+                    localizationService2.GetString("dialog.configGroupExistsMessage", str),
                     ControlAppearance.Caution,
                     null,
                     TimeSpan.FromSeconds(2)
@@ -107,7 +111,8 @@ public partial class ScriptControlViewModel : ViewModel
     private void ClearTasks()
     {
         // 确认？
-        var result = MessageBox.Show("是否清空所有任务？", "清空任务", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var localizationService = App.GetService<ILocalizationService>();
+        var result = MessageBox.Show(localizationService.GetString("dialog.confirmClearTasks"), localizationService.GetString("dialog.clearTasks"), MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != System.Windows.MessageBoxResult.Yes)
         {
             return;
@@ -132,10 +137,19 @@ public partial class ScriptControlViewModel : ViewModel
 
         GameInfo? gameInfo = null;
         var config = LogParse.LoadConfig();
+        
+        OtherConfig.Miyoushe mcfg = TaskContext.Instance().Config.OtherConfig.MiyousheConfig;
+        if (mcfg.LogSyncCookie && !string.IsNullOrEmpty(mcfg.Cookie))
+        {
+            config.Cookie = mcfg.Cookie;
+        }
+        
         if (!string.IsNullOrEmpty(config.Cookie))
         {
             config.CookieDictionary.TryGetValue(config.Cookie, out gameInfo);
         }
+
+
 
         LogParseConfig.ScriptGroupLogParseConfig? sgpc;
         if (!config.ScriptGroupLogDictionary.TryGetValue(SelectedScriptGroup.Name, out sgpc))
@@ -194,6 +208,13 @@ public partial class ScriptControlViewModel : ViewModel
         dayRangeComboBox.SelectedIndex = 0;
         stackPanel.Children.Add(dayRangeComboBox);
 
+        CheckBox mergerStatsSwitch = new CheckBox
+        {
+            Content = "合并相邻同名配置组",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        stackPanel.Children.Add(mergerStatsSwitch);
+        
         // 开关控件：ToggleButton 或 CheckBox
         CheckBox faultStatsSwitch = new CheckBox
         {
@@ -201,14 +222,21 @@ public partial class ScriptControlViewModel : ViewModel
             VerticalAlignment = VerticalAlignment.Center
         };
         stackPanel.Children.Add(faultStatsSwitch);
-
-
+        
         // 开关控件：ToggleButton 或 CheckBox
         CheckBox hoeingStatsSwitch = new CheckBox
         {
             Content = "统计锄地摩拉怪物数",
             VerticalAlignment = VerticalAlignment.Center
         };
+        
+        CheckBox GenerateFarmingPlanData = new CheckBox
+        {
+            Content = "生成锄地规划数据",
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        stackPanel.Children.Add(GenerateFarmingPlanData);
+        
         //firstRow.Children.Add(toggleSwitch);
 
         // 将第一行添加到 StackPanel
@@ -270,12 +298,13 @@ public partial class ScriptControlViewModel : ViewModel
         stackPanel.Children.Add(secondRow);
         stackPanel.Children.Add(threeRow);
         //PrimaryButtonText
+        var localizationService = App.GetService<ILocalizationService>();
         var uiMessageBox = new Wpf.Ui.Controls.MessageBox
         {
-            Title = "日志分析",
+            Title = localizationService.GetString("dialog.logAnalysis"),
             Content = stackPanel,
-            CloseButtonText = "取消",
-            PrimaryButtonText = "确定",
+            CloseButtonText = localizationService.GetString("dialog.cancel"),
+            PrimaryButtonText = localizationService.GetString("dialog.confirm"),
             Owner = Application.Current.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
@@ -301,7 +330,10 @@ public partial class ScriptControlViewModel : ViewModel
         dayRangeComboBox.SelectedValue = sgpc.DayRangeValue;
         cookieTextBox.Text = config.Cookie;
         hoeingStatsSwitch.IsChecked = sgpc.HoeingStatsSwitch;
+        GenerateFarmingPlanData.IsChecked = sgpc.GenerateFarmingPlanData;
         faultStatsSwitch.IsChecked = sgpc.FaultStatsSwitch;
+        mergerStatsSwitch.IsChecked = sgpc.MergerStatsSwitch;
+        
         hoeingDelayTextBox.Text = sgpc.HoeingDelay;
 
         MessageBoxResult result = await uiMessageBox.ShowDialogAsync();
@@ -317,12 +349,19 @@ public partial class ScriptControlViewModel : ViewModel
             sgpc.DayRangeValue = dayRangeValue;
             sgpc.RangeValue = rangeValue;
             sgpc.HoeingStatsSwitch = hoeingStatsSwitch.IsChecked ?? false;
+            sgpc.GenerateFarmingPlanData = GenerateFarmingPlanData.IsChecked ?? false;
             sgpc.FaultStatsSwitch = faultStatsSwitch.IsChecked ?? false;
+            sgpc.MergerStatsSwitch = mergerStatsSwitch.IsChecked ?? false;
             sgpc.HoeingDelay = hoeingDelayTextBox.Text;
 
             config.Cookie = cookieValue;
             config.ScriptGroupLogDictionary[SelectedScriptGroup.Name] = sgpc;
 
+            if (mcfg.LogSyncCookie && !string.IsNullOrEmpty(cookieValue))
+            {
+                mcfg.Cookie  = cookieValue;
+            }
+            
             LogParse.WriteConfigFile(config);
 
 
@@ -344,7 +383,7 @@ public partial class ScriptControlViewModel : ViewModel
             }
 
             LogParse.HtmlGenerationStatusChanged += OnHtmlGenerationStatusChanged;
-            Toast.Information("正在准备数据...");
+            Toast.Information(localizationService.GetString("toast.preparingData"));
             List<(string FileName, string Date)> fs = LogParse.GetLogFiles(LogPath);
             if (dayRangeValue != "All")
             {
@@ -361,7 +400,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             if ((hoeingStatsSwitch.IsChecked ?? false) && string.IsNullOrEmpty(cookieValue))
             {
-                Toast.Warning("未填写cookie，此次将不启用锄地统计！");
+                Toast.Warning(localizationService.GetString("toast.noCookieWarning"));
             }
 
             //真正存储的gameinfo
@@ -371,19 +410,19 @@ public partial class ScriptControlViewModel : ViewModel
             {
                 try
                 {
-                    Toast.Information("正在从米游社获取旅行札记数据，请耐心等待！");
+                    Toast.Information(localizationService.GetString("toast.gettingTravelData"));
                     gameInfo = await TravelsDiaryDetailManager.UpdateTravelsDiaryDetailManager(cookieValue);
-                    Toast.Success($"米游社数据获取成功，开始进行解析，请耐心等待！");
+                    Toast.Success(localizationService.GetString("toast.mihoyoDataSuccess"));
                 }
                 catch (Exception)
                 {
                     if (realGameInfo != null)
                     {
-                        Toast.Warning("访问米游社接口异常，此次将锄地统计将不更新最新数据！");
+                        Toast.Warning(localizationService.GetString("toast.mihoyoApiError"));
                     }
                     else
                     {
-                        Toast.Warning("访问米游社接口异常，此次将不启用锄地统计！");
+                        Toast.Warning(localizationService.GetString("toast.mihoyoApiErrorNoStats"));
                     }
                 }
             }
@@ -410,7 +449,7 @@ public partial class ScriptControlViewModel : ViewModel
 
             if (configGroupEntities.Count == 0)
             {
-                Toast.Warning("未解析出日志记录！");
+                Toast.Warning(localizationService.GetString("toast.noLogRecords"));
                 LogParse.HtmlGenerationStatusChanged -= OnHtmlGenerationStatusChanged;
             }
             else
@@ -429,7 +468,7 @@ public partial class ScriptControlViewModel : ViewModel
                 catch (Exception ex)
                 {
                     LogParse.HtmlGenerationStatusChanged -= OnHtmlGenerationStatusChanged;
-                    Toast.Error($"生成日志分析时出错: {ex.Message}");
+                    Toast.Error(localizationService.GetString("toast.logAnalysisError", ex.Message));
                 }
             }
         }
@@ -498,7 +537,8 @@ public partial class ScriptControlViewModel : ViewModel
             SelectedScriptGroup?.AddProject(scriptGroupProject);
         }
 
-        Toast.Success($"增加了{projects.Count - oldcount}个地图追踪任务");
+        var localizationService = App.GetService<ILocalizationService>();
+        Toast.Success(localizationService.GetString("toast.addedMapTasks", projects.Count - oldcount));
         if (SelectedScriptGroup != null) WriteScriptGroup(SelectedScriptGroup);
     }
 
@@ -511,7 +551,34 @@ public partial class ScriptControlViewModel : ViewModel
         projects.ForEach(item => SelectedScriptGroup?.Projects.Add(item));
         if (SelectedScriptGroup != null) WriteScriptGroup(SelectedScriptGroup);
     }
-
+    [RelayCommand]
+    private void ExportMergerJsons()
+    {
+        int count = 0;
+        var pathDir = Path.Combine(LogPath,"exportMergerJson",DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),"AutoPathing");
+        foreach (var scriptGroupProject in SelectedScriptGroup?.Projects ?? [])
+        {
+            if (scriptGroupProject.Type == "Pathing")
+            {
+                var mergerJson= JsonMerger.getMergePathingJson(Path.Combine(MapPathingViewModel.PathJsonPath,
+                    scriptGroupProject.FolderName, scriptGroupProject.Name));
+                string fullPath = Path.Combine(pathDir,scriptGroupProject.FolderName,scriptGroupProject.Name);
+                string dir = Path.GetDirectoryName(fullPath);
+                if (!Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                File.WriteAllText(fullPath, mergerJson);
+                count++;
+            }
+        }
+        if (count>0)
+        {
+            Process.Start("explorer.exe", pathDir);
+        }
+    }
+    
+    
     [RelayCommand]
     public void AddScriptGroupNextFlag(ScriptGroup? item)
     {
@@ -640,18 +707,92 @@ public partial class ScriptControlViewModel : ViewModel
     private void OnAddJsScript()
     {
         var list = LoadAllJsScriptProjects();
-        var combobox = new ComboBox();
+        var stackPanel = CreateJsScriptSelectionPanel(list);
 
-        foreach (var scriptProject in list)
+        var result = PromptDialog.Prompt("请选择需要添加的JS脚本", "请选择需要添加的JS脚本", stackPanel, new Size(500, 600));
+        if (!string.IsNullOrEmpty(result))
         {
-            combobox.Items.Add(scriptProject.FolderName + " - " + scriptProject.Manifest.Name);
+            AddSelectedJsScripts((StackPanel)stackPanel.Content);
+        }
+    }
+
+    private ScrollViewer CreateJsScriptSelectionPanel(List<ScriptProject> list)
+    {
+        var stackPanel = new StackPanel();
+        
+        var filterTextBox = new TextBox
+        {
+            Margin = new Thickness(0, 0, 0, 10),
+            PlaceholderText = "输入搜索条件...",
+        };
+        filterTextBox.TextChanged += delegate { ApplyJsScriptFilter(stackPanel, list, filterTextBox.Text); };
+        stackPanel.Children.Add(filterTextBox);
+        
+        AddJsScriptsToPanel(stackPanel, list, filterTextBox.Text);
+
+        var scrollViewer = new ScrollViewer
+        {
+            Content = stackPanel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Height = 435 // 固定高度
+        };
+
+        return scrollViewer;
+    }
+
+    private void ApplyJsScriptFilter(StackPanel parentPanel, List<ScriptProject> scripts, string filter)
+    {
+        if (parentPanel.Children.Count > 0)
+        {
+            List<UIElement> removeElements = new List<UIElement>();
+            foreach (UIElement parentPanelChild in parentPanel.Children)
+            {
+                if (parentPanelChild is FrameworkElement frameworkElement && frameworkElement.Name.StartsWith("dynamic_"))
+                {
+                    removeElements.Add(frameworkElement);
+                }
+            }
+
+            removeElements.ForEach(parentPanel.Children.Remove);
         }
 
-        var str = PromptDialog.Prompt("请选择需要添加的JS脚本", "请选择需要添加的JS脚本", combobox);
-        if (!string.IsNullOrEmpty(str))
+        AddJsScriptsToPanel(parentPanel, scripts, filter);
+    }
+
+    private void AddJsScriptsToPanel(StackPanel parentPanel, List<ScriptProject> scripts, string filter)
+    {
+        foreach (var script in scripts)
         {
-            var folderName = str.Split(" - ")[0];
-            SelectedScriptGroup?.AddProject(new ScriptGroupProject(new ScriptProject(folderName)));
+            var displayText = script.FolderName + " - " + script.Manifest.Name;
+            
+            if (!string.IsNullOrEmpty(filter) && 
+                !displayText.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                !script.FolderName.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
+                !script.Manifest.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var checkBox = new CheckBox
+            {
+                Content = displayText,
+                Tag = script.FolderName,
+                Margin = new Thickness(0, 2, 0, 2),
+                Name = "dynamic_" + Guid.NewGuid().ToString().Replace("-", "_")
+            };
+
+            parentPanel.Children.Add(checkBox);
+        }
+    }
+
+    private void AddSelectedJsScripts(StackPanel stackPanel)
+    {
+        foreach (var child in stackPanel.Children)
+        {
+            if (child is CheckBox { IsChecked: true } checkBox && checkBox.Tag is string folderName)
+            {
+                SelectedScriptGroup?.AddProject(new ScriptGroupProject(new ScriptProject(folderName)));
+            }
         }
     }
 
@@ -884,7 +1025,8 @@ public partial class ScriptControlViewModel : ViewModel
                 }
                 catch (Exception e)
                 {
-                    Toast.Warning($"加载单个脚本失败：{e.Message}");
+                    var localizationService = App.GetService<ILocalizationService>();
+                    Toast.Warning(localizationService.GetString("toast.loadScriptFailed", e.Message));
                     return null;
                 }
             })
@@ -989,7 +1131,8 @@ public partial class ScriptControlViewModel : ViewModel
             var ui = item.Project.LoadSettingUi(item.JsScriptSettingsObject);
             if (ui == null)
             {
-                Toast.Warning("此脚本未提供自定义配置");
+                var localizationService = App.GetService<ILocalizationService>();
+            Toast.Warning(localizationService.GetString("dialog.noCustomConfig"));
                 return;
             }
 
@@ -1011,7 +1154,8 @@ public partial class ScriptControlViewModel : ViewModel
         }
         else
         {
-            Toast.Warning("只有JS脚本才有自定义配置");
+            var localizationService = App.GetService<ILocalizationService>();
+            Toast.Warning(localizationService.GetString("dialog.onlyJsHasConfig"));
         }
     }
 

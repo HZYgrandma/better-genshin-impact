@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using System.Windows;
 using Windows.System;
@@ -16,14 +17,17 @@ using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoTrackPath;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
+using BetterGenshinImpact.GameTask.LogParse;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Win32;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.Notification;
+using BetterGenshinImpact.View.Controls.Webview;
 using BetterGenshinImpact.View.Converters;
 using BetterGenshinImpact.View.Pages;
 using BetterGenshinImpact.View.Windows;
+using BetterGenshinImpact.ViewModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -39,28 +43,61 @@ namespace BetterGenshinImpact.ViewModel.Pages;
 public partial class CommonSettingsPageViewModel : ViewModel
 {
     private readonly INavigationService _navigationService;
-
     private readonly NotificationService _notificationService;
     private readonly TpConfig _tpConfig = TaskContext.Instance().Config.TpConfig;
 
     private string _selectedArea = string.Empty;
-
-
     private string _selectedCountry = string.Empty;
-    [ObservableProperty] private List<string> _adventurersGuildCountry = ["无", "枫丹", "稻妻", "璃月", "蒙德"];
+    
+    [ObservableProperty] private List<string> _adventurersGuildCountry = [
+        App.GetService<ILocalizationService>().GetString("country.none"),
+        App.GetService<ILocalizationService>().GetString("country.fontaine"),
+        App.GetService<ILocalizationService>().GetString("country.inazuma"),
+        App.GetService<ILocalizationService>().GetString("country.liyue"),
+        App.GetService<ILocalizationService>().GetString("country.mondstadt")
+    ];
+
+    /// <summary>
+    /// ViewModel for managing language selection
+    /// </summary>
+    public LocalizationViewModel LocalizationViewModel { get; }
 
     public CommonSettingsPageViewModel(IConfigService configService, INavigationService navigationService,
-        NotificationService notificationService)
+        NotificationService notificationService, LocalizationViewModel localizationViewModel)
     {
         Config = configService.Get();
         _navigationService = navigationService;
         _notificationService = notificationService;
+        LocalizationViewModel = localizationViewModel;
+        
         InitializeCountries();
+        InitializeMiyousheCookie();
+        
+        // Initialize localization after other components
+        _ = InitializeLocalizationAsync();
+    }
+
+    /// <summary>
+    /// Initializes the localization system
+    /// </summary>
+    private async Task InitializeLocalizationAsync()
+    {
+        try
+        {
+            await LocalizationViewModel.InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't crash the application
+            System.Diagnostics.Debug.WriteLine($"Failed to initialize localization: {ex.Message}");
+        }
     }
 
     public AllConfig Config { get; set; }
     public ObservableCollection<string> CountryList { get; } = new();
     public ObservableCollection<string> Areas { get; } = new();
+    
+    public ObservableCollection<string> MapPathingTypes { get; } = ["SIFT", "TemplateMatch"];
 
     [ObservableProperty] private FrozenDictionary<string, string> _languageDict =
         new string[] { "zh-Hans", "zh-Hant", "en", "fr" }
@@ -97,6 +134,32 @@ public partial class CommonSettingsPageViewModel : ViewModel
             {
                 UpdateRevivePoint(SelectedCountry, SelectedArea);
             }
+        }
+    }
+    
+    [RelayCommand]
+    public void OnQuestionButtonOnClick()
+    {
+        //            Owner = this,
+        WebpageWindow cookieWin = new()
+        {
+            Title = App.GetService<ILocalizationService>().GetString("window.logAnalysis"),
+            Width = 800,
+            Height = 600,
+
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        cookieWin.NavigateToHtml(TravelsDiaryDetailManager.generHtmlMessage());
+        cookieWin.Show();
+    }
+    private void InitializeMiyousheCookie()
+    {
+        OtherConfig.Miyoushe mcfg = TaskContext.Instance().Config.OtherConfig.MiyousheConfig;
+        if (mcfg.Cookie == string.Empty&&
+            mcfg.LogSyncCookie)
+        {
+            var config = LogParse.LoadConfig();
+            mcfg.Cookie = config.Cookie;
         }
     }
 
@@ -160,7 +223,7 @@ public partial class CommonSettingsPageViewModel : ViewModel
     public void OnRefreshMaskSettings()
     {
         WeakReferenceMessenger.Default.Send(
-            new PropertyChangedMessage<object>(this, "RefreshSettings", new object(), "重新计算控件位置"));
+            new PropertyChangedMessage<object>(this, "RefreshSettings", new object(), App.GetService<ILocalizationService>().GetString("message.recalculateControlPositions")));
     }
 
     [RelayCommand]
@@ -236,11 +299,11 @@ public partial class CommonSettingsPageViewModel : ViewModel
             if (Directory.Exists(ScriptRepoUpdater.CenterRepoPathOld))
             {
                 DirectoryHelper.CopyDirectory(ScriptRepoUpdater.CenterRepoPathOld, ScriptRepoUpdater.CenterRepoPath);
-                MessageBox.Information("脚本仓库离线包导入成功！");
+                MessageBox.Information(App.GetService<ILocalizationService>().GetString("message.scriptRepoImportSuccess"));
             }
             else
             {
-                MessageBox.Error("脚本仓库离线包导入失败，不正确的脚本仓库离线包内容！");
+                MessageBox.Error(App.GetService<ILocalizationService>().GetString("message.scriptRepoImportFailed"));
                 DirectoryHelper.DeleteReadOnlyDirectory(ScriptRepoUpdater.ReposPath);
             }
         }
